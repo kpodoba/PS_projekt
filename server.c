@@ -16,6 +16,8 @@
 #define WORD_LENGTH 32
 #define TLV_VALUE_SIZE 64
 #define MAX_ATTEMPTS 6
+#define MULTICAST_IP "239.255.255.250"
+#define MULTICAST_PORT 12346
 
 struct TLV {
     uint8_t type;
@@ -154,38 +156,7 @@ void daemonize() {
 void *multicast_announcer(void *arg) {
     int sock;
     struct sockaddr_in multicast_addr;
-    const char *multicast_ip = "239.255.255.250";
-    const int multicast_port = 12346;
     char message[64];
-    char server_ip[INET_ADDRSTRLEN] = {0};
-
-    // Dynamiczne pobieranie adresu IP serwera
-    struct ifaddrs *ifaddr, *ifa;
-    if (getifaddrs(&ifaddr) == -1) {
-        syslog(LOG_ERR, "Błąd pobierania adresów IP: %m");
-        pthread_exit(NULL);
-    }
-
-    for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
-        if (ifa->ifa_addr == NULL || ifa->ifa_addr->sa_family != AF_INET)
-            continue;
-
-        // Ignoruj interfejsy loopback
-        if (strcmp(ifa->ifa_name, "lo") == 0)
-            continue;
-
-        struct sockaddr_in *addr = (struct sockaddr_in *)ifa->ifa_addr;
-        inet_ntop(AF_INET, &addr->sin_addr, server_ip, sizeof(server_ip));
-        break; // Pobierz pierwszy znaleziony adres
-    }
-    freeifaddrs(ifaddr);
-
-    if (strlen(server_ip) == 0) {
-        syslog(LOG_ERR, "Nie znaleziono odpowiedniego adresu IP serwera");
-        pthread_exit(NULL);
-    }
-
-    syslog(LOG_INFO, "Adres IP serwera: %s", server_ip);
 
     if ((sock = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
         syslog(LOG_ERR, "Błąd tworzenia gniazda multicast: %m");
@@ -194,8 +165,8 @@ void *multicast_announcer(void *arg) {
 
     memset(&multicast_addr, 0, sizeof(multicast_addr));
     multicast_addr.sin_family = AF_INET;
-    multicast_addr.sin_addr.s_addr = inet_addr(multicast_ip);
-    multicast_addr.sin_port = htons(multicast_port);
+    multicast_addr.sin_addr.s_addr = inet_addr(MULTICAST_IP);
+    multicast_addr.sin_port = htons(MULTICAST_PORT);
 
     snprintf(message, sizeof(message), "Server:%s:%d", server_ip, PORT);
 
@@ -209,6 +180,7 @@ void *multicast_announcer(void *arg) {
     close(sock);
     pthread_exit(NULL);
 }
+
 
 void *client_handler(void *arg) {
     int client_fd = (intptr_t)arg;
